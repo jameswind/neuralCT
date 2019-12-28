@@ -1,5 +1,5 @@
 import numpy as np
-
+import mdtraj as md
 import argparse
 
 import torch
@@ -35,12 +35,14 @@ group.add_argument("-nmlp", type=int, default=2, help="Number of layers in each 
 
 group = parser.add_argument_group('Target parameters')
 group.add_argument("-dataset", default="./database/alanine-dipeptide-3x250ns-heavy-atom-positions.npz", help="Path to training data")
+group.add_argument("-loadWithMdtraj", type=bool,default=None, help="if True, then load data using mdtraj")
 group.add_argument("-baseDataSet",default=None,help="Known CV data base")
 group.add_argument("-miBatch",type=int,default=5, help="Batch size when evaluate MI")
 group.add_argument("-miSample",type=int,default=1000, help="Sample when evaluate MI")
 group.add_argument("-loadrange",default=3,type=int,help="Array nos to load from npz file")
 group.add_argument("-smile", default="CC(=O)NC(C)C(=O)NC",help="smile expression")
-group.add_argument("-scaling",default=10,type=float,help = "Scaling factor of npz data, default is for nm to ångströms")
+group.add_argument("-scaling",default=10,type=float,help = "Scaling factor of npz data, default is for nm to angstroms")
+group.add_argument("-removeH",default=True, type=bool, help = "if true, remove H atoms from snapshots")
 group.add_argument("-fixx",default=0,type=float,help="Offset of x axis")
 group.add_argument("-fixy",default=0,type=float,help="Offset of y axis")
 group.add_argument("-fixz",default=0,type=float,help="Offset of z axis")
@@ -62,8 +64,39 @@ else:
 if rootFolder[-1] != '/':
     rootFolder += '/'
 utils.createWorkSpace(rootFolder)
+
+from utils import MDSampler,loadmd,loadmd_mdtraj
+from utils import variance,smile2mass
+
 if not args.load:
-    n = 3*len([i for i in args.smile if i.isalpha()])
+    fix = np.array([args.fixx,args.fixy,args.fixz])
+    scaling = args.scaling
+    removeH = args.removeH
+    with h5py.File(rootFolder+"/parameter.hdf5","w") as f:
+        f.create_dataset("fix",data=fix)
+        f.create_dataset("scaling",data=scaling)
+        f.create_dataset("removeH",data=removeH)
+else:
+    with h5py.File(rootFolder+"/parameter.hdf5","r") as f:
+        fix = np.array(f["fix"])
+        scaling = float(np.array(f["scaling"]))
+        removeH = bool(np.array(f["removeH"]))
+
+if args.loadWithMdtraj == True:
+    dataset, SMILE = loadmd_mdtraj(args.dataset,scaling,removeH)
+    dataset = dataset.to(device)
+    SMILE = smile2mass(SMILE)
+else:
+    loadrange = ["arr_" + str(i) for i in range(args.loadrange)]
+    dataset = loadmd(args.dataset,loadrange,scaling,fix).to(device)
+    SMILE = smile2mass(args.smile)
+
+if not args.double:
+    dataset = dataset.to(torch.float32)
+
+if not args.load:
+    #n = 3*len([i for i in args.smile if i.isalpha()])
+    n = 3*len(SMILE)
     numFlow = args.numFlow
     lossPlotStep = args.save_period
     hidden = args.hdim
@@ -73,8 +106,6 @@ if not args.load:
     batchSize = args.batch
     Nepochs = args.epochs
     K = args.K
-    fix = np.array([args.fixx,args.fixy,args.fixz])
-    scaling = args.scaling
     with h5py.File(rootFolder+"/parameter.hdf5","w") as f:
         f.create_dataset("n",data=n)
         f.create_dataset("numFlow",data=numFlow)
@@ -86,8 +117,6 @@ if not args.load:
         f.create_dataset("batchSize",data=batchSize)
         f.create_dataset("Nepochs",data=Nepochs)
         f.create_dataset("K",data=K)
-        f.create_dataset("fix",data=fix)
-        f.create_dataset("scaling",data=scaling)
 else:
     with h5py.File(rootFolder+"/parameter.hdf5","r") as f:
         n = int(np.array(f["n"]))
@@ -100,18 +129,6 @@ else:
         batchSize = int(np.array(f["batchSize"]))
         Nepochs = int(np.array(f["Nepochs"]))
         K = int(np.array(f["K"]))
-        fix = np.array(f["fix"])
-        scaling = float(np.array(f["scaling"]))
-
-from utils import MDSampler,loadmd
-from utils import variance,smile2mass
-
-loadrange = ["arr_" + str(i) for i in range(args.loadrange)]
-dataset = loadmd(args.dataset,loadrange,scaling,fix).to(device)
-SMILE = smile2mass(args.smile)
-
-if not args.double:
-    dataset = dataset.to(torch.float32)
 
 if args.double:
     pVariance = torch.tensor([variance(torch.tensor(item).double(),K) for item in SMILE],dtype=torch.float64).reshape(1,-1).repeat(3,1).permute(1,0).reshape(-1)

@@ -1,6 +1,7 @@
 import torch
 import source
 import numpy as np
+import mdtraj as md
 from .img_trans import logit
 
 def loadmd(filename,dataname=["arr_0","arr_1","arr_2"],scale=10.0,fix=np.array([0,2.3222,0])):
@@ -12,6 +13,21 @@ def loadmd(filename,dataname=["arr_0","arr_1","arr_2"],scale=10.0,fix=np.array([
     batchSize = data.shape[0]
     data = data.reshape(-1,3) - fix
     return torch.from_numpy(data.reshape(batchSize,-1)).double()*scale
+
+def loadmd_mdtraj(filename, scale=10.0, removeH=True):
+    traj = md.load(filename,top = filename.replace('.xtc','.pdb'))
+    data = traj.xyz                                                                               
+    top = traj.topology                                                                                                        
+    table, bonds = top.to_dataframe()                                                                                          
+    SMILE = ' '.join((table['element'].to_numpy())).replace(' ','')
+    if removeH == True:                                                     
+        idx_not_H = [not(ss == 'H') for ss in SMILE]                         
+        data = np.reshape(data,[-1,len(SMILE),3])[:,idx_not_H,:]
+        SMILE = SMILE.replace('H','')                                                                                          
+    batchSize = data.shape[0]
+    data = data.reshape(-1,3)
+    data -= np.mean(data,axis=0,keepdims=True)
+    return torch.from_numpy(data.reshape(batchSize,-1)).double()*scale, SMILE
 
 def load(filename):
     data = torch.from_numpy(np.load(filename)["arr_0"]).float()
