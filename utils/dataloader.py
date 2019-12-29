@@ -16,8 +16,10 @@ def loadmd(filename,dataname=["arr_0","arr_1","arr_2"],scale=10.0,fix=np.array([
 
 def loadmd_mdtraj(filename, scale=10.0, removeH=True):
     traj = md.load(filename,top = filename.replace('.xtc','.pdb'))
-    data = traj.xyz                                                                               
-    top = traj.topology                                                                                                        
+    data = traj.xyz
+    com = np.reshape(md.compute_center_of_mass(traj), [-1,1,3])
+    data -= com
+    top = traj.topology 
     table, bonds = top.to_dataframe()                                                                                          
     SMILE = ' '.join((table['element'].to_numpy())).replace(' ','')
     if removeH == True:                                                     
@@ -25,8 +27,10 @@ def loadmd_mdtraj(filename, scale=10.0, removeH=True):
         data = np.reshape(data,[-1,len(SMILE),3])[:,idx_not_H,:]
         SMILE = SMILE.replace('H','')                                                                                          
     batchSize = data.shape[0]
-    data = data.reshape(-1,3)
-    data -= np.mean(data,axis=0,keepdims=True)
+    #data = data.reshape(-1,3)
+    #nframe = np.shape(data)[0]
+    #nskip = nframe // 10000  # mean of too many numbers will lose accuracy
+    #data -= np.mean(data[::nskip],axis=0,keepdims=True)
     return torch.from_numpy(data.reshape(batchSize,-1)).double()*scale, SMILE
 
 def load(filename):

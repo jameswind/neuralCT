@@ -23,7 +23,7 @@ group.add_argument("-cuda", type=int, default=-1, help="Which device to use with
 group.add_argument("-lr", type=float, default=0.001, help="Learning rate")
 group.add_argument("-save", action='store_true',help="If save or not")
 group.add_argument("-load", action='store_true' ,help="If load or not")
-group.add_argument("-save_period", type=int, default=10, help="Save after how many steps")
+group.add_argument("-save_period", type=int, default=1, help="Save after how many steps")
 group.add_argument("-K",type=float, default=300, help="Temperature")
 group.add_argument("-double", action='store_true',help="Use double or single")
 
