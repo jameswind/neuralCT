@@ -16,6 +16,7 @@ def loadmd(filename,dataname=["arr_0","arr_1","arr_2"],scale=10.0,fix=np.array([
 
 def loadmd_mdtraj(filename, scale=10.0, removeH=True):
     traj = md.load(filename,top = filename.replace('.xtc','.pdb'))
+    traj.superpose(traj, frame=0)
     data = traj.xyz
     com = np.reshape(md.compute_center_of_mass(traj), [-1,1,3])
     data -= com
